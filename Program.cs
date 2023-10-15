@@ -38,11 +38,8 @@ internal class Program
                 stopwatch.Stop();
                 totalTicks += stopwatch.ElapsedTicks;
 
-                lock (lockObject)
-                {
-                    Console.Clear();
-                    Console.WriteLine($"Iteration {i + 1}: Found {primeCount} prime numbers in {stopwatch.ElapsedMilliseconds} ms");
-                }
+                Console.Clear();
+                Console.WriteLine($"Iteration {i + 1}: Found {primeCount} prime numbers in {stopwatch.ElapsedMilliseconds} ms");
             }
         }
 
@@ -67,11 +64,8 @@ internal class Program
         double averageTimeMs = (double)totalTicks / Stopwatch.Frequency / repetitions * 1000;
         double averageTimeSeconds = (double)totalTicks / Stopwatch.Frequency / repetitions;
 
-        lock (lockObject)
-        {
-            Console.WriteLine($"\nAverage time for {repetitions} iterations: \n\n{averageTimeMs} milliseconds \n{averageTimeSeconds} seconds");
-            Console.WriteLine("\nPress Any Key To Exit");
-        }
+        Console.WriteLine($"\nAverage time for {repetitions} iterations: \n\n{averageTimeMs} milliseconds \n{averageTimeSeconds} seconds");
+        Console.WriteLine("\nPress Any Key To Exit");
 
         Console.ReadKey();
     }
