@@ -1,4 +1,6 @@
 
+using System.Collections.Generic;
+
 namespace PrimeNumberCounting;
 
 internal class Program
@@ -9,29 +11,31 @@ internal class Program
         Console.ReadKey(true);
         RunProgram();
     }
-
     static void RunProgram()
     {
         // Times might be faster or slower depending on your system hardware keep in mind
         int limit = 1000000;
         int iterations = 100;
         double totalTime = 0;
+        int globalCount = -3;
+        int segmentSize = IdealSegmentSize(limit);
+        int sqrtLimit = (int)Math.Sqrt(limit);
 
         // Warm-up Iterations
         // When using NativeAOT Runtime initial threaded can be slower so we run a 100 warm up iterations to get the runtime up to speed before recording the actual measurments
         const int warmUpIterations = 100;
         Console.WriteLine("Warming Up Runtime");
-        double warmUpTime = CountPrimesWithWarmUp(limit, warmUpIterations);
-        Console.Clear();
-        Console.WriteLine($"Warm-up completed in {warmUpTime} ms\n");
+        double warmUpTime = CountPrimesWarmUp(limit, warmUpIterations);
+        Console.WriteLine($"\nWarm-up completed in {warmUpTime} ms");
 
         // Recorded Iterations
         for (int i = 0; i < iterations; i++)
         {
             Stopwatch sw = Stopwatch.StartNew();
-            int count = CountPrimes(limit);
+            int count = CountPrimes(limit, segmentSize, globalCount, sqrtLimit);
             sw.Stop();
-            Console.WriteLine($"Iteration {i + 1}: Found {count} prime numbers in {sw.Elapsed.TotalMilliseconds} ms");
+            Console.Clear();
+            Console.WriteLine($"Iteration {i + 1}: Found {count} prime numbers using segments of {IdealSegmentSize(limit)} in {sw.Elapsed.TotalMilliseconds} ms");
             totalTime += sw.Elapsed.TotalMilliseconds;
         }
 
@@ -42,90 +46,80 @@ internal class Program
         var keyInfo = Console.ReadKey(true);
         if (keyInfo.Key == ConsoleKey.Spacebar)
         {
-            Console.Clear();
             RunProgram();
         }
     }
 
-    public static int CountPrimes(int n)
+    public static int CountPrimes(int n, int s, int gl, int sq)
     {
-        // Seperates n into different segments based on segmentSize, then proceeds to run each segment multi-threaded, each thread will calcualte how many prime numbers are within its segment then add back to the global count of Primes counted then returns when each thread completes its segment
-        const int segmentSize = 10000; // 1000 2500 5000 10000 are all square roots of 1000000 that you can use. I have the fastest times with 10000
-        int sqrt = (int)Math.Sqrt(n);
-        int globalCount = -1;
         object lockObject = new();
 
-        // pre-calculate the primes up to the square root of n before running the multi-threaded segments. This way, you avoid redundant calculations within each segment.
-        List<int> primes = new();
-        for (int i = 2; i <= sqrt; i++)
+        // List to store prime numbers
+        List<int> primes = new List<int>();
+        bool[] isComposite = new bool[s];
+
+        // Pre-calculate primes up to the square root of n
+        Parallel.For(2, sq + 1, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, i =>
         {
-            bool isPrime = true;
-            foreach (int prime in primes)
+            if (!isComposite[i])
             {
-                if (i % prime == 0)
+                if (!isComposite[i])
                 {
-                    isPrime = false;
-                    break;
-                }
-            }
-            if (isPrime) primes.Add(i);
-        }
-
-        // Multi-threaded segment logic
-        Parallel.For(0, (n / segmentSize) + 1, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, segment =>
-        {
-            int start = segment * segmentSize;
-            int end = Math.Min(start + segmentSize, n);
-            int localCount = 0;
-
-            bool[] isPrime = new bool[segmentSize];
-            Array.Fill(isPrime, true);
-
-            // Sieve of Eratosthenes logic
-            foreach (int prime in primes)
-            {
-                if (prime * prime > start + segmentSize) break;
-
-                int offset = start % prime == 0 ? 0 : prime - (start % prime);
-
-                if (start % prime == 0)
-                {
-                    for (int i = offset; i < segmentSize; i += prime)
+                    lock (primes) primes.Add(i);
+                    for (int j = i * i; j <= sq; j += i)
                     {
-                        if (i + start != prime) isPrime[i] = false;
-                    }
-                }
-                else
-                {
-                    int j = (start / prime + 1) * prime;
-
-                    if (j < start) j += prime;
-
-                    for (int i = j - start; i < segmentSize; i += prime)
-                    {
-                        isPrime[i] = false;
+                        isComposite[j] = true;
                     }
                 }
             }
-
-            for (int i = 0; i < segmentSize && start + i <= n; i++)
-            {
-                if (isPrime[i]) localCount++;
-            }
-
-            lock (lockObject) globalCount += localCount;
         });
 
-        return globalCount;
+        // Multi-threaded segment logic
+        Parallel.For(0, (n / s) + 1, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, segment =>
+        {
+            int start = segment * s;
+            int end = Math.Min(start + s, n);
+            int localCount = 0;
+            bool[] segmentIsComposite = new bool[s];
+
+            // Sieve of Eratosthenes logic for each segment
+            foreach (int prime in primes)
+            {
+                int startMultiple = start / prime * prime;
+                if (startMultiple < start) startMultiple += prime;
+
+                for (int j = Math.Max(startMultiple, prime * prime); j < end; j += prime)
+                {
+                    segmentIsComposite[j - start] = true;
+                }
+            }
+
+            // Counting local primes for each segment
+            for (int i = 0; i < s && start + i <= n; i++)
+            {
+                if (!segmentIsComposite[i]) localCount++;
+            }
+
+            gl += localCount;
+        });
+
+        return gl;
     }
-    public static double CountPrimesWithWarmUp(int n, int warmUpIterations)
+    private static int IdealSegmentSize(int n)
+    {
+        // Method to calculate the ideal segment size for Multi-threading based on your processor
+        int processorCount = Environment.ProcessorCount;
+        int idealSegmentSize = n / (2 * processorCount);
+        return idealSegmentSize;
+    }
+    private static double CountPrimesWarmUp(int n, int warmUpIterations)
     {
         // Warm-Up Iterations Logic
         double totalTime = 0;
         for (int i = 0; i < warmUpIterations; i++)
         {
             Stopwatch sw = Stopwatch.StartNew();
-            CountPrimes(n);
+            CountPrimes(n, IdealSegmentSize(n), -3, (int)Math.Sqrt(n));
             sw.Stop();
             totalTime += sw.Elapsed.TotalMilliseconds;
         }
