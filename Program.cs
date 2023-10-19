@@ -63,13 +63,10 @@ internal class Program
         {
             if (!isComposite[i])
             {
-                if (!isComposite[i])
+                lock (lockObject) primes.Add(i);
+                for (int j = i * i; j <= sq; j += i)
                 {
-                    lock (primes) primes.Add(i);
-                    for (int j = i * i; j <= sq; j += i)
-                    {
-                        isComposite[j] = true;
-                    }
+                    isComposite[j] = true;
                 }
             }
         });
