@@ -55,7 +55,7 @@ internal class Program
         int globalCount = -1;
         object lockObject = new();
 
-        // pre-calculate the primes up to the square root of the maximum value before running the multi-threaded segments. This way, you avoid redundant calculations within each segment.
+        // pre-calculate the primes up to the square root of n before running the multi-threaded segments. This way, you avoid redundant calculations within each segment.
         List<int> primes = new();
         for (int i = 2; i <= sqrt; i++)
         {
@@ -68,10 +68,7 @@ internal class Program
                     break;
                 }
             }
-            if (isPrime)
-            {
-                primes.Add(i);
-            }
+            if (isPrime) primes.Add(i);
         }
 
         // Multi-threaded segment logic
@@ -87,10 +84,7 @@ internal class Program
             // Sieve of Eratosthenes logic
             foreach (int prime in primes)
             {
-                if (prime * prime > start + segmentSize)
-                {
-                    break;
-                }
+                if (prime * prime > start + segmentSize) break;
 
                 int offset = start % prime == 0 ? 0 : prime - (start % prime);
 
@@ -98,19 +92,15 @@ internal class Program
                 {
                     for (int i = offset; i < segmentSize; i += prime)
                     {
-                        if (i + start != prime)
-                        {
-                            isPrime[i] = false;
-                        }
+                        if (i + start != prime) isPrime[i] = false;
                     }
                 }
                 else
                 {
                     int j = (start / prime + 1) * prime;
-                    if (j < start)
-                    {
-                        j += prime;
-                    }
+
+                    if (j < start) j += prime;
+
                     for (int i = j - start; i < segmentSize; i += prime)
                     {
                         isPrime[i] = false;
@@ -120,16 +110,10 @@ internal class Program
 
             for (int i = 0; i < segmentSize && start + i <= n; i++)
             {
-                if (isPrime[i])
-                {
-                    localCount++;
-                }
+                if (isPrime[i]) localCount++;
             }
 
-            lock (lockObject)
-            {
-                globalCount += localCount;
-            }
+            lock (lockObject) globalCount += localCount;
         });
 
         return globalCount;
